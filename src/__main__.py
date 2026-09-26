@@ -3,7 +3,7 @@ from typing import Any
 import json
 import os
 
-from .tokenizer import VocabIndex
+from .tokenizer import Tokenizer
 from .parser import read_args
 from .models import Prompts, FuncDefs
 from .generate import generate_record
@@ -47,19 +47,19 @@ args = read_args()
 defs: FuncDefs = args.defs
 prompts: Prompts = args.prompts
 model = Small_LLM_Model(args.model, device='cpu')
-tokenizer = VocabIndex(model)
+tokenizer = Tokenizer(model)
 
 str_defs = defs.model_dump_json()
 answers: list[dict[Any]] = []
 for task in prompts.all:
     prompt_ids: list[int] = model.encode(system_prompt)[0].tolist()
     answer = generate_record(
-        sdk=model,
+        get_logits_fn=model.get_logits_from_input_ids,
         # encode_fn=lambda x: model.encode(x)[0].tolist(),
         encode_fn=tokenizer.encode,
         functions=defs.all,
         base_ids=prompt_ids,
-        vocab=tokenizer,
+        tokenizer=tokenizer,
         prompt=system_prompt,
         task=task
     )
@@ -68,7 +68,7 @@ for task in prompts.all:
 with open('data/output/answers.json', 'w') as f:
     json.dump(answers, f)
 # model = Small_LLM_Model()
-# vocab = VocabIndex(model)
+# vocab = Tokenizer(model)
 # encoded = model.encode(text)[0].tolist()
 # my_encoded = vocab.encode(text)
 # with open('data/output/encoded.txt', 'w') as f:

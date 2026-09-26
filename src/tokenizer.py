@@ -20,7 +20,7 @@ def do_bytes_to_unicode() -> dict[int, str]:
     return dict(zip(_bytes, _chars))
 
 
-class VocabIndex:
+class Tokenizer:
     def __init__(self, model: Model) -> None:
         with open(
                 model.get_path_to_tokenizer_file(),

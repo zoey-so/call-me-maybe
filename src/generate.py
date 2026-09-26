@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from collections.abc import Callable
 
-from .tokenizer import VocabIndex
+from .tokenizer import Tokenizer
 from .models import FuncDef, Prompts, FuncDefs, ParamType
 import time
 
@@ -36,7 +36,7 @@ def _build_trie(strings: list[str]) -> _TrieNode:
 
 
 def _allowed_from_trie_node(
-    node: "_TrieNode", vocab: VocabIndex
+    node: "_TrieNode", tokenizer: Tokenizer
 ) -> dict[int, "_TrieNode"]:
     """Masking mechanism:
     given a char by char trie, get all token ids starting with that char
@@ -49,9 +49,9 @@ def _allowed_from_trie_node(
     """
     candidates: dict[int, "_TrieNode"] = {}
     for edge_char in node.children:
-        # print("allowed len: ", len(vocab.ids_starting_with_chars(edge_char)))
-        for token_id in vocab.ids_starting_with_chars(edge_char):
-            text = vocab.id_to_byte_txt[token_id]
+        # print("allowed len: ", len(tokenizer.ids_starting_with_chars(edge_char)))
+        for token_id in tokenizer.ids_starting_with_chars(edge_char):
+            text = tokenizer.id_to_byte_txt[token_id]
             walk_node = node
             ok = True
             for ch in text:
@@ -61,13 +61,13 @@ def _allowed_from_trie_node(
                     break
                 walk_node = next_node
             if ok:
-                # print("OK", token_id, vocab.id_to_byte_txt[token_id])
+                # print("OK", token_id, tokenizer.id_to_byte_txt[token_id])
                 candidates[token_id] = walk_node
     return candidates
 
 
 def generate_from_closed_set(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex, options: list[str]
+    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, options: list[str]
 ) -> tuple[str, list[int]]:
     """Constrained generating from set of strings.
     Builds tries char by char for every option,
@@ -92,13 +92,13 @@ def generate_from_closed_set(
             node = next_node
         if auto_completed:
             if node.is_end:
-                generated_ids.extend(vocab.encode(auto_completed_text))
+                generated_ids.extend(tokenizer.encode(auto_completed_text))
                 break
-            generated_ids.extend(vocab.encode(auto_completed_text[:-1]))
+            generated_ids.extend(tokenizer.encode(auto_completed_text[:-1]))
             node = prev_node
             auto_completed_text = ""
         st = time.time()
-        candidates = _allowed_from_trie_node(node, vocab)
+        candidates = _allowed_from_trie_node(node, tokenizer)
         et = time.time()
         print(f"allowed time = {(et-st):.3f}")
         if not candidates:
@@ -109,24 +109,24 @@ def generate_from_closed_set(
             )
 
         current_ids = context_ids + generated_ids
-        logits = sdk.get_logits_from_input_ids(current_ids)
+        logits = get_logits_fn(current_ids)
         best_logit = max(range(len(logits)), key=lambda i: logits[i])
         if best_logit == 151645:
             break
-        # print("best_logit:", best_logit, vocab.id_to_byte_txt.get(best_logit, "Not found"))
+        # print("best_logit:", best_logit, tokenizer.id_to_byte_txt.get(best_logit, "Not found"))
         best_id = max(candidates, key=lambda i: logits[i])
         generated_ids.append(best_id)
         node = candidates[best_id]
-    # print(sdk.decode(generated_ids))
-    return sdk.decode(generated_ids), generated_ids
+    # print(tokenizer.decode(generated_ids))
+    return tokenizer.decode(generated_ids), generated_ids
 
 
 def generate_boolean(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex
+    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer
 ) -> tuple[bool, list[int]]:
     """Calling generate_from_closed_set with true and false words.
     """
-    matched, ids = generate_from_closed_set(sdk, context_ids, vocab, ["true", "false"])
+    matched, ids = generate_from_closed_set(get_logits_fn, context_ids, tokenizer, ["true", "false"])
     return matched == "true", ids
 
 
@@ -159,7 +159,7 @@ def _number_token_end_state(text: str, start_state: str) -> str | None:
 
 
 def generate_number(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex, max_tokens: int = 16
+    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, max_tokens: int = 16
 ) -> tuple[float, list[int]]:
     """Constrained generatung a JSON number (int or float)
     Using DFA to handle the leading - and floating point numbers.
@@ -172,8 +172,8 @@ def generate_number(
     for _ in range(max_tokens):
         start_chars = _NUMBER_STATE_START_CHARS[state]
         end_states: dict[int, str] = {}
-        for token_id in vocab.ids_starting_with_chars(start_chars):
-            end_state = _number_token_end_state(vocab.id_to_byte_txt[token_id], state)
+        for token_id in tokenizer.ids_starting_with_chars(start_chars):
+            end_state = _number_token_end_state(tokenizer.id_to_byte_txt[token_id], state)
             if end_state is not None:
                 end_states[token_id] = end_state
 
@@ -182,11 +182,12 @@ def generate_number(
                 break
             raise RuntimeError(
                 f"grammar error: number generation stuck in state {state!r} "
-                f"with no valid continuation (generated so far: {generated_ids!r})"
+                "with no valid continuation "
+                f"(generated so far: {generated_ids!r})"
             )
 
         current_ids = context_ids + generated_ids
-        logits = sdk.get_logits_from_input_ids(current_ids)
+        logits = get_logits_fn(current_ids)
         unconstrained_top = max(range(len(logits)), key=lambda i: logits[i])
 
         if state in _NUMBER_ACCEPTING and unconstrained_top not in end_states:
@@ -196,7 +197,7 @@ def generate_number(
         generated_ids.append(best_id)
         state = end_states[best_id]
 
-    text = "".join(vocab.id_to_byte_txt[i] for i in generated_ids)
+    text = "".join(tokenizer.id_to_byte_txt[i] for i in generated_ids)
     if not text or text == "-":
         raise RuntimeError(
             f"number generation produced no usable digits (text={text!r}) "
@@ -217,7 +218,10 @@ def _is_valid_string_content(text: str) -> bool:
 
 
 def generate_string(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex, max_tokens: int = 40
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    max_tokens: int = 40
 ) -> tuple[str, list[int]]:
     """Most open generaation type for strings.
     No masking because to many possibilities,
@@ -231,15 +235,15 @@ def generate_string(
     for _ in range(max_tokens):
         current_ids = context_ids + generated_ids
         is_valid = False
-        logits = sdk.get_logits_from_input_ids(current_ids)
+        logits = get_logits_fn(current_ids)
         while not is_valid:
             top_id = max(range(len(logits)), key=lambda i: logits[i])
-            txt = vocab.id_to_byte_txt.get(top_id, "")
+            txt = tokenizer.id_to_byte_txt.get(top_id, "")
             is_valid = _is_valid_string_content(txt)
             # print(f"top id so far: {top_id!r}, {txt!r}, {is_valid}")
             tokens_ids = sorted(enumerate(logits), key=lambda x: x[1], reverse=True)
             # next_token_id = max(range(0, len(logits)), key=lambda i: logits[i])
-            print("Top 3: ", f"{[sdk.decode(v[0]) for v in tokens_ids[:4]]}")
+            print("Top 3: ", f"{[tokenizer.decode([v[0]]) for v in tokens_ids[:4]]}")
             if top_id == 151645:
                 is_end = True
                 break
@@ -248,8 +252,8 @@ def generate_string(
             # elif is_anything:
             #     is_end = True
             #     break
-            elif '"' in vocab.id_to_byte_txt.get(top_id):
-                generated_ids += vocab.encode(vocab.id_to_byte_txt.get(top_id).split('"')[0])
+            elif '"' in tokenizer.id_to_byte_txt.get(top_id):
+                generated_ids += tokenizer.encode(tokenizer.id_to_byte_txt.get(top_id).split('"')[0])
                 is_end = True
                 break
             if not is_valid:
@@ -257,21 +261,21 @@ def generate_string(
         if is_end:
             break
         generated_ids.append(top_id)
-    # print("Generated in string: ", vocab.decode(generated_ids))
-    text = sdk.decode(generated_ids) if generated_ids else ""
+    # print("Generated in string: ", tokenizer.decode(generated_ids))
+    text = tokenizer.decode(generated_ids) if generated_ids else ""
     # print("Generated in string: ", text)
     return text, generated_ids
 
 
 def generate_parameter_value(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex, param_type: str
+    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, param_type: str
 ) -> tuple[Any, list[int]]:
     if param_type == "number":
-        return generate_number(sdk, context_ids, vocab)
+        return generate_number(get_logits_fn, context_ids, tokenizer)
     if param_type == "string":
-        return generate_string(sdk, context_ids, vocab)
+        return generate_string(get_logits_fn, context_ids, tokenizer)
     if param_type == "boolean":
-        return generate_boolean(sdk, context_ids, vocab)
+        return generate_boolean(get_logits_fn, context_ids, tokenizer)
     raise ValueError(
         f"unsupported parameter type {param_type!r}"
     )
@@ -279,22 +283,22 @@ def generate_parameter_value(
 
 
 def select_function(
-    sdk: LLMSdk, context_ids: list[int], vocab: VocabIndex, functions: list[FuncDef]
+    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, functions: list[FuncDef]
 ) -> tuple[FuncDef, list[int]]:
     """Calls generate_from_closed_set()
     with function names to get function name.
     """
     names = [f.name for f in functions]
     # print("names: ", names)
-    matched_name, ids = generate_from_closed_set(sdk, context_ids, vocab, names)
+    matched_name, ids = generate_from_closed_set(get_logits_fn, context_ids, tokenizer, names)
     return next(f for f in functions if f.name == matched_name), ids
 
 
 def generate_record(
-    sdk: LLMSdk,
+    get_logits_fn: Callable[[list[int]], list[float]],
     encode_fn: Callable[[str], list[int]],
     base_ids: list[int],
-    vocab: VocabIndex,
+    tokenizer: Tokenizer,
     prompt: str,
     functions: list[FuncDef],
     task: str
@@ -302,7 +306,8 @@ def generate_record(
     """Generation of name and parameters for a single prompt.
     Parameters
     ----------
-    sdk: LLMSdk Protocol
+    get_logits_fn: Callable[[list[int]], list[float]]
+        function for getting llm output for given token ids.
     encode_fn: Callable[[str], list[int]]
         function for encoding returning list of token ids.
     base_ids: list[int]
@@ -325,8 +330,8 @@ def generate_record(
     funcs_ids = encode_fn(prompt + funcs_prompt + user_input + answer)
     et = time.time()
     TIME += et - st
-    # print(sdk.decode(funcs_ids))
-    chosen, name_ids = select_function(sdk, funcs_ids, vocab, functions)
+    # print(tokenizer.decode(funcs_ids))
+    chosen, name_ids = select_function(get_logits_fn, funcs_ids, tokenizer, functions)
     prompt += (f"Allowed functions are: {chosen.model_dump_json()}<|im_end|>\n"
                )
     # prompt += (f"Allowed functions are: {chosen.model_dump_json()}\n"
@@ -351,8 +356,8 @@ def generate_record(
         et = time.time()
         TIME += et - st
         new_prompt = running_ids + param_prompt
-        # print(sdk.decode(new_prompt))
-        value, value_ids = generate_parameter_value(sdk, new_prompt, vocab, param_type["type"].value)
+        # print(tokenizer.decode(new_prompt))
+        value, value_ids = generate_parameter_value(get_logits_fn, new_prompt, tokenizer, param_type["type"].value)
         answer += str(value)
         if param_type["type"] == ParamType.STR:
             answer += '"'
@@ -363,11 +368,11 @@ def generate_record(
         # param_prompt = encode_fn(f"Give me only the paramter {param_name} value<im_end>\n"
         #                             "<|im_start|>assistant\n")
         # new_prompt = running_ids + param_prompt
-        # print(sdk.decode(new_prompt))
-        # value, value_ids = generate_parameter_value(sdk, new_prompt, vocab, param_type["type"].value)
+        # print(tokenizer.decode(new_prompt))
+        # value, value_ids = generate_parameter_value(get_logits_fn, new_prompt, tokenizer, param_type["type"].value)
         # running_ids += encode_fn(f"Parameter {param_name} value is ")
         # running_ids += value_ids
-        # running_ids.append(vocab.uni_txt_to_id[vocab.byte_to_unicode[ord('\n')]])
+        # running_ids.append(tokenizer.uni_txt_to_id[tokenizer.byte_to_unicode[ord('\n')]])
         # parameters[param_name] = value
     tet = time.time()
     print(f"total time: {tet-tst:.3f}")
