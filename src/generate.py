@@ -1,20 +1,13 @@
 import json
-from dataclasses import dataclass
 from typing import Any, Protocol
 from collections.abc import Callable
 
 from .tokenizer import Tokenizer
 from .models import FuncDef, Prompts, FuncDefs, ParamType
+from .vis import TraceStep
 import time
 
 TIME = 0  # just for tests
-
-
-class LLMSdk(Protocol):
-    def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]: ...
-    from torch import Tensor
-    def decode(self, ids: list[int]) -> str: ...
-    def encode(self, text: str) -> Tensor: ...
 
 
 class _TrieNode:
@@ -67,8 +60,17 @@ def _allowed_from_trie_node(
 
 
 def generate_from_closed_set(
-    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, options: list[str]
-) -> tuple[str, list[int]]:
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    options: list[str],
+    steps: list[TraceStep] | None = None,
+    stage: str = 'closed_set',
+    prompt: str = '',
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0
+) -> tuple[str, list[int], int]:
     """Constrained generating from set of strings.
     Builds tries char by char for every option,
     masks tokens that can't be any of the option.
@@ -84,6 +86,7 @@ def generate_from_closed_set(
 
     while not node.is_end:
         auto_completed = False
+        st = time.time()
         while len(node.children) == 1:
             auto_completed = True
             (char, next_node), = node.children.items()
@@ -91,16 +94,31 @@ def generate_from_closed_set(
             prev_node = node
             node = next_node
         if auto_completed:
+            et = time.time()
+            answer += auto_completed_text
+            if steps is not None:
+                steps.append(
+                    TraceStep(
+                        stage=stage,
+                        step_index=step_index,
+                        forced=True,
+                        chosen_id=1,
+                        chosen_text=auto_completed_text,
+                        prompt=prompt,
+                        _id=_id,
+                        _time=f"{et - st:.3f}",
+                        answer=answer
+                    )
+                )
+                step_index += 1
             if node.is_end:
                 generated_ids.extend(tokenizer.encode(auto_completed_text))
                 break
             generated_ids.extend(tokenizer.encode(auto_completed_text[:-1]))
+            answer = answer[:-1]
             node = prev_node
             auto_completed_text = ""
-        st = time.time()
         candidates = _allowed_from_trie_node(node, tokenizer)
-        et = time.time()
-        print(f"allowed time = {(et-st):.3f}")
         if not candidates:
             raise RuntimeError(
                 "Must be some error in generate_from_closed_set: "
@@ -109,25 +127,52 @@ def generate_from_closed_set(
             )
 
         current_ids = context_ids + generated_ids
+        st = time.time()
         logits = get_logits_fn(current_ids)
         best_logit = max(range(len(logits)), key=lambda i: logits[i])
         if best_logit == 151645:
             break
         # print("best_logit:", best_logit, tokenizer.id_to_byte_txt.get(best_logit, "Not found"))
         best_id = max(candidates, key=lambda i: logits[i])
+        et = time.time()
         generated_ids.append(best_id)
         node = candidates[best_id]
+        answer += tokenizer.id_to_byte_txt[best_id]
+        if steps is not None:
+            steps.append(
+                TraceStep(
+                    stage=stage,
+                    step_index=step_index,
+                    forced=False,
+                    chosen_id=1,
+                    chosen_text=tokenizer.id_to_byte_txt[best_id],
+                    prompt=prompt,
+                    _id=_id,
+                    _time=f"{et - st:.3f}",
+                    answer=answer
+                )
+            )
+            step_index += 1
     # print(tokenizer.decode(generated_ids))
-    return tokenizer.decode(generated_ids), generated_ids
+    return tokenizer.decode(generated_ids), generated_ids, step_index
 
 
 def generate_boolean(
-    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer
-) -> tuple[bool, list[int]]:
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    steps: list[TraceStep] | None = None,
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0
+) -> tuple[str, list[int], int]:
     """Calling generate_from_closed_set with true and false words.
     """
-    matched, ids = generate_from_closed_set(get_logits_fn, context_ids, tokenizer, ["true", "false"])
-    return matched == "true", ids
+    matched, ids, step_index = generate_from_closed_set(
+        get_logits_fn, context_ids, tokenizer, ["true", "false"],
+        steps=steps, stage="boolean", prompt="",
+        _id=_id, answer=answer, step_index=step_index)
+    return matched, ids, step_index
 
 
 _NUMBER_TRANSITIONS: dict[str, dict[str, str]] = {
@@ -159,8 +204,15 @@ def _number_token_end_state(text: str, start_state: str) -> str | None:
 
 
 def generate_number(
-    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, max_tokens: int = 16
-) -> tuple[float, list[int]]:
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    steps: list[TraceStep] | None = None,
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0,
+    max_tokens: int = 16
+) -> tuple[float | int, list[int], int]:
     """Constrained generatung a JSON number (int or float)
     Using DFA to handle the leading - and floating point numbers.
     We need to have at least one digit. After that if anything other than
@@ -170,10 +222,12 @@ def generate_number(
     state = "START"
 
     for _ in range(max_tokens):
+        st = time.time()
         start_chars = _NUMBER_STATE_START_CHARS[state]
         end_states: dict[int, str] = {}
         for token_id in tokenizer.ids_starting_with_chars(start_chars):
-            end_state = _number_token_end_state(tokenizer.id_to_byte_txt[token_id], state)
+            end_state = _number_token_end_state(
+                tokenizer.id_to_byte_txt[token_id], state)
             if end_state is not None:
                 end_states[token_id] = end_state
 
@@ -189,26 +243,40 @@ def generate_number(
         current_ids = context_ids + generated_ids
         logits = get_logits_fn(current_ids)
         unconstrained_top = max(range(len(logits)), key=lambda i: logits[i])
-
+        print("top id: ",
+              tokenizer.id_to_byte_txt.get(unconstrained_top, "Not found"))
         if state in _NUMBER_ACCEPTING and unconstrained_top not in end_states:
             break
-
         best_id = max(end_states, key=lambda i: logits[i])
         generated_ids.append(best_id)
         state = end_states[best_id]
-
+        answer += tokenizer.id_to_byte_txt.get(best_id, "")
+        if steps is not None:
+            et = time.time()
+            steps.append(
+                TraceStep(
+                    stage="generate number",
+                    step_index=step_index,
+                    forced=False,
+                    chosen_id=best_id,
+                    chosen_text=tokenizer.id_to_byte_txt.get(best_id, ""),
+                    prompt="",
+                    _id=_id,
+                    _time=f"{et - st:.3f}",
+                    answer=answer
+                )
+            )
+            step_index += 1
     text = "".join(tokenizer.id_to_byte_txt[i] for i in generated_ids)
     if not text or text == "-":
         raise RuntimeError(
-            f"number generation produced no usable digits (text={text!r}) "
-            "-- max_tokens may be too low, or the model never found the "
-            "number-start characters worth generating for this prompt"
-        )
-    return float(text), generated_ids
+            f"number generation produced no usable digits (text={text!r}) ")
+    res = float(text) if "." in text else int(text)
+    return res, generated_ids, step_index
 
 
 def _is_valid_string_content(text: str) -> bool:
-    disallowed_string_chars = {'"', "\\"}
+    disallowed_string_chars = {""}
     if not text:
         return False
     for ch in text:
@@ -221,8 +289,12 @@ def generate_string(
     get_logits_fn: Callable[[list[int]], list[float]],
     context_ids: list[int],
     tokenizer: Tokenizer,
+    steps: list[TraceStep] | None = None,
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0,
     max_tokens: int = 40
-) -> tuple[str, list[int]]:
+) -> tuple[str, list[int], int]:
     """Most open generaation type for strings.
     No masking because to many possibilities,
     just checking the tokens for quotes and escape chars.
@@ -233,6 +305,7 @@ def generate_string(
     # is_anything = False
     is_end = False
     for _ in range(max_tokens):
+        st = time.time()
         current_ids = context_ids + generated_ids
         is_valid = False
         logits = get_logits_fn(current_ids)
@@ -252,30 +325,57 @@ def generate_string(
             # elif is_anything:
             #     is_end = True
             #     break
-            elif '"' in tokenizer.id_to_byte_txt.get(top_id):
-                generated_ids += tokenizer.encode(tokenizer.id_to_byte_txt.get(top_id).split('"')[0])
-                is_end = True
-                break
-            if not is_valid:
+            elif '"' in txt:
+                if generated_ids or txt.count('"') > 1:
+                    is_end = True
+                    break
+            if not is_valid or (not generated_ids and '"' not in txt):
                 logits[top_id] = float('-inf')
+        generated_ids.append(top_id)
+        et = time.time()
+        if steps is not None:
+            answer += txt
+            steps.append(
+                TraceStep(
+                    stage="generate string",
+                    step_index=step_index,
+                    forced=False,
+                    chosen_id=top_id,
+                    chosen_text=txt,
+                    prompt="",
+                    _id=_id,
+                    _time=f"{et - st:.3f}",
+                    answer=answer
+                )
+            )
+            step_index += 1
         if is_end:
             break
-        generated_ids.append(top_id)
+        print("generated_ids: ", generated_ids, tokenizer.decode(generated_ids))
     # print("Generated in string: ", tokenizer.decode(generated_ids))
     text = tokenizer.decode(generated_ids) if generated_ids else ""
+    if '"' in text:
+        text = text.split('"')[1]
     # print("Generated in string: ", text)
-    return text, generated_ids
+    return text, generated_ids, step_index
 
 
 def generate_parameter_value(
-    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, param_type: str
-) -> tuple[Any, list[int]]:
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    param_type: str,
+    steps: list[TraceStep] | None = None,
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0
+) -> tuple[Any, list[int], int]:
     if param_type == "number":
-        return generate_number(get_logits_fn, context_ids, tokenizer)
+        return generate_number(get_logits_fn, context_ids, tokenizer, steps, _id, answer, step_index)
     if param_type == "string":
-        return generate_string(get_logits_fn, context_ids, tokenizer)
+        return generate_string(get_logits_fn, context_ids, tokenizer, steps, _id, answer, step_index)
     if param_type == "boolean":
-        return generate_boolean(get_logits_fn, context_ids, tokenizer)
+        return generate_boolean(get_logits_fn, context_ids, tokenizer, steps, _id, answer, step_index)
     raise ValueError(
         f"unsupported parameter type {param_type!r}"
     )
@@ -283,15 +383,26 @@ def generate_parameter_value(
 
 
 def select_function(
-    get_logits_fn: Callable[[list[int]], list[float]], context_ids: list[int], tokenizer: Tokenizer, functions: list[FuncDef]
+    get_logits_fn: Callable[[list[int]], list[float]],
+    context_ids: list[int],
+    tokenizer: Tokenizer,
+    functions: list[FuncDef],
+    steps: list[TraceStep] | None = None,
+    prompt: str = '',
+    _id: str = '',
+    answer: str | None = None,
+    step_index: int = 0
 ) -> tuple[FuncDef, list[int]]:
     """Calls generate_from_closed_set()
     with function names to get function name.
     """
     names = [f.name for f in functions]
     # print("names: ", names)
-    matched_name, ids = generate_from_closed_set(get_logits_fn, context_ids, tokenizer, names)
-    return next(f for f in functions if f.name == matched_name), ids
+    matched_name, ids, step_index = generate_from_closed_set(
+        get_logits_fn, context_ids, tokenizer,
+        names, steps, "select_function", prompt, _id, answer, step_index)
+    return next(
+        f for f in functions if f.name == matched_name), ids, step_index
 
 
 def generate_record(
@@ -301,7 +412,9 @@ def generate_record(
     tokenizer: Tokenizer,
     prompt: str,
     functions: list[FuncDef],
-    task: str
+    task: str,
+    steps: list[TraceStep] | None = None,
+    _id: str = ''
 ) -> dict[str, Any]:
     """Generation of name and parameters for a single prompt.
     Parameters
@@ -313,6 +426,7 @@ def generate_record(
     base_ids: list[int]
     """
     global TIME
+    step_index = 0
     running_ids = list(base_ids)
     tst = time.time()
     funcs_prompt = ("Allowed functions are: "
@@ -331,7 +445,9 @@ def generate_record(
     et = time.time()
     TIME += et - st
     # print(tokenizer.decode(funcs_ids))
-    chosen, name_ids = select_function(get_logits_fn, funcs_ids, tokenizer, functions)
+    chosen, ids, step_index = select_function(
+        get_logits_fn, funcs_ids, tokenizer,
+        functions, steps, task, _id, answer[21:], step_index)
     prompt += (f"Allowed functions are: {chosen.model_dump_json()}<|im_end|>\n"
                )
     # prompt += (f"Allowed functions are: {chosen.model_dump_json()}\n"
@@ -341,26 +457,27 @@ def generate_record(
     running_ids = encode_fn(prompt)
     et = time.time()
     TIME += et - st
-    answer += f'{chosen.name}",' + '"arguments":{"name": '
+    answer += f'{chosen.name}", ' + '"arguments":{'
     # running_ids += encode_fn(answer)
 
     parameters: dict[str, dict[str, ParamType]] = {}
     for i, (param_name, param_type) in enumerate(chosen.parameters.items()):
         if i > 0:
-            answer += ','
-        answer += f'"{param_name}": '
-        if param_type["type"] == ParamType.STR:
-            answer += '"'
+            answer += ', '
+        answer += f'"{param_name}":'
+        # if param_type["type"] == ParamType.STR:
+        #     answer += '"'
         st = time.time()
         param_prompt = encode_fn(answer)
         et = time.time()
         TIME += et - st
         new_prompt = running_ids + param_prompt
+        print("answer: ", answer)
         # print(tokenizer.decode(new_prompt))
-        value, value_ids = generate_parameter_value(get_logits_fn, new_prompt, tokenizer, param_type["type"].value)
-        answer += str(value)
-        if param_type["type"] == ParamType.STR:
-            answer += '"'
+        value, value_ids, step_index = generate_parameter_value(
+            get_logits_fn, new_prompt,
+            tokenizer, param_type["type"].value, steps, _id, answer[21:], step_index)
+        answer += f' "{str(value)}"' if param_type["type"] == ParamType.STR else f' {str(value)}'
         parameters[param_name] = value
     # for i, (param_name, param_type) in enumerate(chosen.parameters.items()):
         # if i > 0:
@@ -377,4 +494,18 @@ def generate_record(
     tet = time.time()
     print(f"total time: {tet-tst:.3f}")
     print(f"time in encode: {TIME:.3f}")
+    if steps is not None:
+        steps.append(
+            TraceStep(
+                stage="end",
+                step_index=step_index,
+                forced=False,
+                chosen_id=1,
+                chosen_text=answer[21:],
+                prompt=prompt,
+                _id=_id,
+                _time=f"{tet - tst:.3f}",
+                answer=answer[21:] + '}'
+            )
+        )
     return {"prompt": task, "name": chosen.name, "parameters": parameters}

@@ -2,16 +2,26 @@ from llm_sdk import Small_LLM_Model
 from typing import Any
 import json
 import os
+import time
+import hashlib
 
 from .tokenizer import Tokenizer
 from .parser import read_args
 from .models import Prompts, FuncDefs
 from .generate import generate_record
 
+from .generate import generate_from_closed_set, generate_boolean
+from .vis import VisQueue, start_trace_server
+import sys
+import socket
+import time
+import json
+import tempfile
 # import json
 # with open('data/input/functions_definition.json', 'r') as f:
 #     raw = json.load(f)
 # defs = FuncDefs.model_validate(raw)
+
 
 system_prompt = ("<|im_start|>system\nYou are a helpful assistant that will perform function calling.\n"
                  "Your job is to first understand what functions you can use, and then to "
@@ -44,10 +54,17 @@ system_prompt = ("<|im_start|>system\nYou are a helpful assistant that will perf
 
 
 args = read_args()
+live: VisQueue | None = None
+if args.verbose:
+    live = VisQueue()
+    server = start_trace_server(live, port=args.port)
+    print(f"Viewer is running at http://localhost:{server.server_port}/")
+    live.wait_for_viewer()
+
 defs: FuncDefs = args.defs
 prompts: Prompts = args.prompts
 model = Small_LLM_Model(args.model, device='cpu')
-tokenizer = Tokenizer(model)
+tokenizer = Tokenizer(model.get_path_to_tokenizer_file())
 
 str_defs = defs.model_dump_json()
 answers: list[dict[Any]] = []
@@ -61,12 +78,15 @@ for task in prompts.all:
         base_ids=prompt_ids,
         tokenizer=tokenizer,
         prompt=system_prompt,
-        task=task
+        task=task,
+        steps=live,
+        _id=hashlib.md5(task.encode()).hexdigest()
     )
     print(answer)
     answers.append(answer)
-with open('data/output/answers.json', 'w') as f:
+with open(args.output, 'w') as f:
     json.dump(answers, f)
+live.finish()
 # model = Small_LLM_Model()
 # vocab = Tokenizer(model)
 # encoded = model.encode(text)[0].tolist()

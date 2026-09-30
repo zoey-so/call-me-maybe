@@ -1,0 +1,108 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Generation visualization</title><style>
+body { font-family: ui-monospace, monospace; color:#e6e6e6;
+       padding:2rem; max-width:60rem; margin:0 auto; background: 
+    linear-gradient(145deg,#706b6f 10%,#0a0507 10.5% 19%,#0000 19.5% 80.5%,#0a0507 81% 89.5%,#2c4e46 90%), linear-gradient(145deg,#706b6f 10%,#0a0507 10.5% 19%,#0000 19.5% 80.5%,#0a0507 81% 89.5%,#2c4e46 90%) calc(269px/2) 269px,
+    linear-gradient( 35deg,#706b6f 10%,#0a0507 10.5% 19%,#0000 19.5% 80.5%,#0a0507 81% 89.5%,#2c4e46 90%), linear-gradient( 35deg,#706b6f 10%,#0a0507 10.5% 19%,#0000 19.5% 80.5%,#0a0507 81% 89.5%,#2c4e46 90%) calc(269px/2) 269px,
+    conic-gradient(from -90deg at 37.5% 50%,#0000 75%, #706b6f 0) calc(269px/8) 0,
+    conic-gradient(from -90deg at 37.5% 50%,#0000 75%,#2c4e46 0) calc(269px/2) 0,
+    linear-gradient(90deg,#2c4e46 38%, #706b6f 0 50%,#2c4e46 0 62%, #706b6f 0);
+  background-size: 269px calc(2*269px/3);}
+h1 { font-size:1.1rem; color:#9fd; }
+#status { color:#888; font-size:0.85em; margin-bottom:1rem; }
+.step { padding: 0.5rem 0.8rem;
+    background: #181b22;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    margin-block: 0.1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;}
+.step.forced { border-left-color:#555; opacity:0.75; }
+.stage { color:#7fd7ff; font-weight:bold; margin-right:0.5rem; }
+.forced-tag { color:#888; font-style:italic; font-size:0.85em; }
+.chosen-text { color:#8f8; font-weight:bold; }
+.candidates { margin-top:0.4rem; margin-left:1rem; font-size:0.9em; display:inline-block;}
+.candidate { display:flex; justify-content:space-between; max-width:20rem;
+             opacity:0.45; padding:1px 0; }
+.candidate.chosen { opacity:1; color:#8f8; }
+.score { color:#999; }
+.prompt-container { display:flex;flex-direction:column;margin-top:0.5rem;font-size:0.9em;color:#aaa;
+    padding: 1rem;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(5px);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgb(193 86 86 / 10%), inset 0 0 16px 1px rgb(128 56 56 / 80%);
+  position: relative;
+  overflow: hidden;
+}
+
+.prompt { background: #0e3b3f;
+    padding: 0.6rem 1rem;
+    border-radius: 4px;
+    margin-top: 0.2rem;
+    box-shadow: 1px 0px 5px 18px rgba(0, 0, 0, 0.1), 0px 0px 0 rgb(255 249 249 / 50%), 5px -8px 0 rgb(239 6 6 / 10%), 1px 0px 16px 1px rgb(232 87 87 / 80%);
+}
+.answer { background: #110a0a;
+    border-radius: 4px;
+    margin-block: 0.2rem;
+    color: #8f8;
+    line-height: 1.5rem;
+    height: 5rem;
+    margin-inline: 4rem;
+    padding: 1rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.5), inset 0 -1px 0 rgb(193 86 86 / 10%), inset 0 0 6px 1px rgb(41 61 33 / 80%);
+}
+.steps { display:flex; flex-direction:column; }
+</style></head><body>
+<h1>Generation visualization</h1>
+<div id="status">connecting...</div>
+<div id="steps"></div>
+<script>
+const statusEl = document.getElementById('status');
+const container = document.getElementById('steps');
+const source = new EventSource('/events');
+function getOrCreateElement(selector, parent = document.body, step) {
+    let element = document.getElementById(selector);
+    if (!element) {
+        element = document.createElement('div');
+        element.id = selector;
+        element.className = 'prompt-container';
+        element.innerHTML = `<h2 class="prompt">${step.prompt}</h2><div class="answer"></div><div class="steps"></div>`;
+        parent.appendChild(element);
+    }
+    return element;
+}
+source.onopen = () => { statusEl.textContent = 'connected -- waiting for steps'; };
+source.onerror = () => { statusEl.textContent = 'connection lost'; };
+
+source.onmessage = (e) => {
+  const step = JSON.parse(e.data);
+  statusEl.textContent = `step ${step.step_index} (${step.stage})`;
+  const id = step._id;
+    const div = getOrCreateElement(id, container, step);
+    const answerEl = div.querySelector('.answer');
+    answerEl.textContent = step.answer ?? '';
+    if (step.stage === 'end') {
+        answerEl.innerHTML += `<br/>Total time: ${step._time}s`;
+        return;
+    }
+    const stepsContainer = div.querySelector('.steps');
+    const stepDiv = document.createElement('div');
+  stepDiv.className = 'step' + (step.forced ? ' forced' : '');
+  const chosen = `<span class="chosen-text">${JSON.stringify(step.chosen_text)}</span>`;
+    stepDiv.innerHTML = `<div><span class="stage">${step.stage}</span><span>&nbsp;step ${step.step_index}: `
+      + `chose&nbsp;${chosen}&nbsp;</span>${step.forced ? `<span class="forced-tag">(forced -- no model call)</span>` : ''}</div>`
+      + `<span class="time">[Time: ${step._time}s]</span>`;
+  stepsContainer.appendChild(stepDiv);
+  div.scrollIntoView({behavior: 'smooth', block: 'start'});
+};
+
+source.addEventListener('done', () => {
+  statusEl.textContent = 'generation finished';
+  source.close();
+});
+</script>
+</body></html>
+

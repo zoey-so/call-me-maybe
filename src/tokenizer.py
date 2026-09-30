@@ -1,7 +1,6 @@
 import json
 import regex
 from collections import defaultdict
-from llm_sdk import Small_LLM_Model as Model  # type: ignore[attr-defined]
 
 from .models import TokenizerFile, SplitPreTokenizer, SequencePreTokenizer
 
@@ -21,9 +20,9 @@ def do_bytes_to_unicode() -> dict[int, str]:
 
 
 class Tokenizer:
-    def __init__(self, model: Model) -> None:
+    def __init__(self, tf_path: str) -> None:
         with open(
-                model.get_path_to_tokenizer_file(),
+                tf_path,
                 'r', encoding="utf-8") as f:
             content = json.load(f)
         tf = TokenizerFile.model_validate(content)

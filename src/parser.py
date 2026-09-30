@@ -1,6 +1,7 @@
 from pathlib import Path
 import argparse
 import json
+import os
 
 from .models import Prompts, FuncDefs
 from pydantic import ValidationError
@@ -21,13 +22,31 @@ def parse_pydantic_model(
     except json.JSONDecodeError:
         raise argparse.ArgumentTypeError("Input must be a valid JSON file.")
     except ValidationError as e:
-        failed_fields = [str(err['loc'][0]) for err in e.errors()]
         raise argparse.ArgumentTypeError(
-            "Validation failed. Missing or invalid fields: "
-            f"{', '.join(failed_fields)}"
-        )
+            f"Validation failed for {path.name}. Missing or invalid fields: "
+            f"{e}")
     except IOError:
         raise argparse.ArgumentTypeError(f"Could not read file: {value}")
+
+
+def check_output_path(path: str) -> Path:
+    """Checks if the provided output path is valid and writable.
+    Raises argparse errors to be displayed.
+    Returns Path object if valid to be kept in argparse namespace.
+    """
+    try:
+        output_path = Path(path)
+        if output_path.exists() and not output_path.is_file():
+            raise argparse.ArgumentTypeError(
+                f"Output path must be a file, not a directory: {path}")
+        else:
+            os.makedirs(output_path.parent, exist_ok=True)
+        output_path.touch(exist_ok=True)
+        with open(output_path, 'a'):
+            pass
+    except IOError:
+        raise argparse.ArgumentTypeError(f"Cannot write to file: {path}")
+    return output_path
 
 
 def read_args() -> argparse.Namespace:
@@ -63,7 +82,7 @@ def read_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-o", "--output",
-        type=Path,
+        type=check_output_path,
         default="data/output/function_calling_results.json",
         help="Path to output JSON file with results"
                 "(default: data/output/function_calling_results.json)"
@@ -73,5 +92,16 @@ def read_args() -> argparse.Namespace:
         type=str,
         default="Qwen/Qwen3-0.6B",
         help="Model name (default: Qwen/Qwen3-0.6B)"
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable visualisation output"
+    )
+    parser.add_argument(
+        "-p", "--port",
+        type=int,
+        default=4242,
+        help="Port number for visualisation (default: 4242)"
     )
     return parser.parse_args()
