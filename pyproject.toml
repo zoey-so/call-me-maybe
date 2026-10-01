@@ -1,0 +1,36 @@
+[project]
+name = "call-me-maybe"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "zoey-so", email = "xkokaxx@gmail.com" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "llm-sdk",
+    "numpy<2",
+    "pydantic>=2.13.5",
+    "tokenizers>=0.19.1",
+    "transformers>=4.51",
+]
+
+[dependency-groups]
+dev = [
+    "flake8>=7.3.0",
+    "mypy>=2.3.1",
+    "types-pygments>=2.21.0.20260819",
+    "types-regex>=2026.9.10.20260911",
+]
+
+[tool.uv.workspace]
+members = [
+    "llm_sdk",
+]
+
+[tool.uv.sources]
+llm-sdk = { workspace = true }
+
+
+
+

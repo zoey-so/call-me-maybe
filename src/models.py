@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from enum import Enum
-from pydantic import BaseModel, RootModel, field_validator, ConfigDict, Field
+from pydantic import BaseModel, RootModel, \
+            field_validator, ConfigDict, Field
 from typing import Annotated, Literal, Any
 
 
@@ -87,22 +87,30 @@ class TokenizerFile(_ExtraIgnore):
 
 # arguments
 # ===== Function Definitions
-class ParamType(Enum):
-    BOOL = "boolean"
-    STR = "string"
-    NB = "number"
-    OBJ = "object"
-    ARR = "array"
-    NULL = "null"
+
+class FlatParamDef(BaseModel):
+    type: Literal["boolean", "string", "number", "null"]
 
 
-class ParamDef(BaseModel):
-    type: ParamType
-    properties: dict[str, ParamDef] | None = None
-    items: ParamDef | None = None
+class ObjParamDef(BaseModel):
+    type: Literal["object"]
+    properties: dict[str, ParamDef]
 
 
-ParamDef.model_rebuild()
+class ArrParamDef(BaseModel):
+    type: Literal["array"]
+    items: ParamDef
+
+
+ParamDef = FlatParamDef | ObjParamDef | ArrParamDef
+
+
+class RootParamDef(BaseModel):
+    root: ParamDef = Field(..., discriminator="type")
+
+
+ObjParamDef.model_rebuild()
+ArrParamDef.model_rebuild()
 
 
 class FuncDef(BaseModel):
@@ -123,5 +131,3 @@ class Prompts(RootModel[list[dict[Literal["prompt"], str]]]):
     def all(self) -> list[str]:
         """Return the list of input prompts."""
         return [x["prompt"] for x in self.root]
-
-

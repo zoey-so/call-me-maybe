@@ -1,0 +1,145 @@
+[
+  {
+    "name": "fn_add_numbers",
+    "description": "Add two numbers together and return their sum.",
+    "parameters": {
+      "a": { "type": "number" },
+      "b": { "type": "number" }
+    },
+    "returns": { "type": "number" }
+  },
+  {
+    "name": "fn_greet",
+    "description": "Generate a greeting message for a person by name.",
+    "parameters": {
+      "name": { "type": "string" }
+    },
+    "returns": { "type": "string" }
+  },
+  {
+    "name": "fn_reverse_string",
+    "description": "Reverse a string and return the reversed result.",
+    "parameters": {
+      "s": { "type": "string" }
+    },
+    "returns": { "type": "string" }
+  },
+  {
+    "name": "fn_get_square_root",
+    "description": "Calculate the square root of a number.",
+    "parameters": {
+      "a": { "type": "number" }
+    },
+    "returns": { "type": "number" }
+  },
+  {
+    "name": "fn_substitute_string_with_regex",
+    "description": "Replace all occurrences matching a regex pattern in a string.",
+    "parameters": {
+      "source_string": { "type": "string" },
+      "regex": { "type": "string" },
+      "replacement": { "type": "string" }
+    },
+    "returns": { "type": "string" }
+  },
+  {
+    "name": "fn_is_palindrome",
+    "description": "Check whether a string reads the same forwards and backwards.",
+    "parameters": {
+      "s": { "type": "string" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_contains_substring",
+    "description": "Check whether a string contains another string as a substring.",
+    "parameters": {
+      "source_string": { "type": "string" },
+      "substring": { "type": "string" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_check_number_in_range",
+    "description": "Check whether a number falls within a given range, optionally including the endpoints.",
+    "parameters": {
+      "a": { "type": "number" },
+      "min": { "type": "number" },
+      "max": { "type": "number" },
+      "inclusive": { "type": "boolean" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_format_text",
+    "description": "Format a string, optionally converting it to uppercase.",
+    "parameters": {
+      "s": { "type": "string" },
+      "uppercase": { "type": "boolean" }
+    },
+    "returns": { "type": "string" }
+  },
+  {
+    "name": "fn_is_even",
+    "description": "Check whether a number is even.",
+    "parameters": {
+      "a": { "type": "number" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_round_number",
+    "description": "Round a number to the nearest whole number, rounding up or down as specified.",
+    "parameters": {
+      "a": { "type": "number" },
+      "round_up": { "type": "boolean" }
+    },
+    "returns": { "type": "number" }
+  },
+  {
+    "name": "fn_sum_list",
+    "description": "Sum all the numbers in a list and return the total.",
+    "parameters": {
+      "numbers": {
+        "type": "array",
+        "items": { "type": "number" }
+      }
+    },
+    "returns": { "type": "number" }
+  },
+  {
+    "name": "fn_build_profile",
+    "description": "Build a user profile record from a name, age, and active status.",
+    "parameters": {
+      "profile": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "age": { "type": "number" },
+          "is_active": { "type": "boolean" }
+        }
+      }
+    },
+    "returns": { "type": "object" }
+  },
+  {
+    "name": "fn_sum_number_pairs",
+    "description": "Given a list of number pairs, add each pair together and return the list of sums.",
+    "parameters": {
+      "pairs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "a": { "type": "number" },
+            "b": { "type": "number" }
+          }
+        }
+      }
+    },
+    "returns": {
+      "type": "array",
+      "items": { "type": "number" }
+    }
+  }
+]

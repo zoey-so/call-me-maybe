@@ -8,16 +8,17 @@ from pydantic import ValidationError
 
 
 def parse_pydantic_model(
-        value, model: Prompts | FuncDefs) -> Prompts | FuncDefs:
+        value: str, model: type[Prompts | FuncDefs]) -> Prompts | FuncDefs:
     """Validates provided JSON files using a Pydantic model
     raising argparse errors to be displayed.
     Returns models if valid to be kept in argparse namespace.
     """
     path = Path(value)
-    if not path.exists:
-        raise argparse.ArgumentError(f"No such file or directory: {value}")
+    if not path.exists():
+        raise argparse.ArgumentError(
+            None, f"No such file or directory: {value}")
     try:
-        json_data = json.loads(path.read_text())
+        json_data = json.loads(path.read_text(encoding='utf-8'))
         return model.model_validate(json_data)
     except json.JSONDecodeError:
         raise argparse.ArgumentTypeError("Input must be a valid JSON file.")
@@ -63,9 +64,7 @@ def read_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "-fd", "--functions_definition",
-        type=lambda x:
-            FuncDefs.model_validate(
-                json.loads(Path(x).read_text(encoding='utf-8'))),
+        type=lambda x: parse_pydantic_model(x, FuncDefs),
         dest="defs",
         metavar="path_to_definitions",
         default="data/input/functions_definition.json",
@@ -83,9 +82,9 @@ def read_args() -> argparse.Namespace:
     parser.add_argument(
         "-o", "--output",
         type=check_output_path,
-        default="data/output/function_calling_results.json",
+        default="data/output/function_calls.json",
         help="Path to output JSON file with results"
-                "(default: data/output/function_calling_results.json)"
+                "(default: data/output/function_calls.json)"
     )
     parser.add_argument(
         "-m", "--model",
@@ -103,5 +102,12 @@ def read_args() -> argparse.Namespace:
         type=int,
         default=4242,
         help="Port number for visualisation (default: 4242)"
+    )
+    parser.add_argument(
+        "-d", "--device",
+        choices=["cpu", "mps", "cuda"],
+        default=None,
+        help=("Chose device for model "
+              "(default: cuda or mps if available else cpu)")
     )
     return parser.parse_args()

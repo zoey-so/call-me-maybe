@@ -1,0 +1,56 @@
+[
+  {
+    "name": "fn_is_palindrome",
+    "description": "Check whether a string reads the same forwards and backwards.",
+    "parameters": {
+      "s": { "type": "string" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_contains_substring",
+    "description": "Check whether a string contains another string as a substring.",
+    "parameters": {
+      "source_string": { "type": "string" },
+      "substring": { "type": "string" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_check_number_in_range",
+    "description": "Check whether a number falls within a given range, optionally including the endpoints.",
+    "parameters": {
+      "a": { "type": "number" },
+      "min": { "type": "number" },
+      "max": { "type": "number" },
+      "inclusive": { "type": "boolean" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_format_text",
+    "description": "Format a string, optionally converting it to uppercase.",
+    "parameters": {
+      "s": { "type": "string" },
+      "uppercase": { "type": "boolean" }
+    },
+    "returns": { "type": "string" }
+  },
+  {
+    "name": "fn_is_even",
+    "description": "Check whether a number is even.",
+    "parameters": {
+      "a": { "type": "number" }
+    },
+    "returns": { "type": "boolean" }
+  },
+  {
+    "name": "fn_round_number",
+    "description": "Round a number to the nearest whole number, rounding up or down as specified.",
+    "parameters": {
+      "a": { "type": "number" },
+      "round_up": { "type": "boolean" }
+    },
+    "returns": { "type": "number" }
+  }
+]

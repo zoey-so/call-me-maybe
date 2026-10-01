@@ -1,0 +1,48 @@
+[
+  {
+    "name": "fn_sum_list",
+    "description": "Sum all the numbers in a list and return the total.",
+    "parameters": {
+      "numbers": {
+        "type": "array",
+        "items": { "type": "number" }
+      }
+    },
+    "returns": { "type": "number" }
+  },
+  {
+    "name": "fn_build_profile",
+    "description": "Build a user profile record from a name, age, and active status.",
+    "parameters": {
+      "profile": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "age": { "type": "number" },
+          "is_active": { "type": "boolean" }
+        }
+      }
+    },
+    "returns": { "type": "object" }
+  },
+  {
+    "name": "fn_sum_number_pairs",
+    "description": "Given a list of number pairs, add each pair together and return the list of sums.",
+    "parameters": {
+      "pairs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "a": { "type": "number" },
+            "b": { "type": "number" }
+          }
+        }
+      }
+    },
+    "returns": {
+      "type": "array",
+      "items": { "type": "number" }
+    }
+  }
+]

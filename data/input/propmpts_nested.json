@@ -1,0 +1,17 @@
+[
+  {
+    "prompt": "Sum these numbers: 4, 8, 15, 16, 23, 42"
+  },
+  {
+    "prompt": "Sum an empty list of numbers"
+  },
+  {
+    "prompt": "Create a profile for Alice, age 30, who is currently active"
+  },
+  {
+    "prompt": "Add these number pairs together: (2, 3), (10, 20), and (7, 1)"
+  },
+  {
+    "prompt": "Add just one pair: (100, 250)"
+  }
+]

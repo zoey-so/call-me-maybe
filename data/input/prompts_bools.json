@@ -1,0 +1,10 @@
+[
+  { "prompt": "Is the empty string a palindrome?" },
+  { "prompt": "Is 7 between 1 and 10?" },
+  { "prompt": "Check if 50 is in the range 10 to 50, inclusive" },
+  { "prompt": "Check if 100 is strictly between 1 and 100, not including the endpoints" },
+  { "prompt": "Make 'hello world' uppercase" },
+  { "prompt": "Format 'Test String', keep the original case, don't uppercase it" },
+  { "prompt": "Round 4.6 up to the nearest whole number" },
+  { "prompt": "Round 4.2 down to the nearest whole number" }
+]

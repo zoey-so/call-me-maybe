@@ -1,3 +1,4 @@
+"""Enabling visualisation fro generation in browser through threading server"""
 import dataclasses
 import http.server
 import json
@@ -7,14 +8,14 @@ import threading
 
 @dataclasses.dataclass
 class TraceStep:
-    stage: str
-    step_index: int
-    forced: bool
-    chosen_id: int
-    chosen_text: str
-    prompt: str
-    _time: str
-    _id: str
+    stage: str = ""
+    step_index: int = 0
+    forced: bool = False
+    chosen_id: int = 0
+    chosen_text: str = ""
+    prompt: str = ""
+    _time: str = ""
+    _id: str = ""
     answer: str | None = None
 
 

@@ -80,6 +80,13 @@ source.onerror = () => { statusEl.textContent = 'connection lost'; };
 source.onmessage = (e) => {
   const step = JSON.parse(e.data);
   statusEl.textContent = `step ${step.step_index} (${step.stage})`;
+  if (step.stage === "finished") {
+    const endDiv = document.createElement('div');
+    endDiv.className = 'prompt-container';
+    endDiv.innerHTML = `<h2 class="prompt">Total time: ${step._time}</h2>`;
+    container.appendChild(endDiv);
+    return;
+  }
   const id = step._id;
     const div = getOrCreateElement(id, container, step);
     const answerEl = div.querySelector('.answer');

@@ -1,3 +1,4 @@
+"""Complete tokenizer for BPE models."""
 import json
 import regex
 from collections import defaultdict
@@ -6,9 +7,10 @@ from .models import TokenizerFile, SplitPreTokenizer, SequencePreTokenizer
 
 
 def do_bytes_to_unicode() -> dict[int, str]:
+    """Convertion to OpenAI's 'pretty' unicode chars"""
     _bytes = list(range(ord("!"), ord("~") + 1)) + \
-         list(range(ord("¡"), ord("¬") + 1)) + \
-         list(range(ord("®"), ord("ÿ") + 1))
+        list(range(ord("¡"), ord("¬") + 1)) + \
+        list(range(ord("®"), ord("ÿ") + 1))
     _chars = [chr(c) for c in _bytes]
     next_free = 256
     for b in range(256):
@@ -20,13 +22,28 @@ def do_bytes_to_unicode() -> dict[int, str]:
 
 
 class Tokenizer:
+    """All logic for encoding and decoding with additional
+    fast mapping dictionaries:
+    uni_txt_to_id - just model vocab dict
+    id_to_uni_txt - reversed vocab with ids as keys
+    byte_to_unicode - mapping of char conversion
+    unicode_to_byte - reversed conversion
+    id_to_byte_txt - mapping from id to standart text
+    first_char_ids - all normal chars have a list of all ids that
+                    start with them
+    merges - dict[tuple[str, str], int] merge pairs with ranking
+    regex - extracted regex for pretokanization split
+    Parameeters
+    ---------
+    tf_path: str
+        path to tokenizer.json file to be used.
+    """
     def __init__(self, tf_path: str) -> None:
         with open(
                 tf_path,
                 'r', encoding="utf-8") as f:
             content = json.load(f)
         tf = TokenizerFile.model_validate(content)
-        # uni_txt_to_id: = VocabFile.model_validate(content).root
         uni_txt_to_id: dict[str, int] = tf.model.vocab
         if tf.added_tokens:
             for at in tf.added_tokens:
@@ -56,12 +73,8 @@ class Tokenizer:
         self.byte_to_unicode: dict[int, str] = byte_to_unicode
         self.first_char_ids: dict[str, list[int]] = first_char_ids
         self.regex = regex.compile(self._extract_regex(tf))
-        # with open("first_char_ids.json", 'w') as f:
-        #     json.dump(self.first_char_ids, f)
         with open("id_to_byte_txt.json", 'w') as f:
             json.dump(self.id_to_byte_txt, f)
-        # with open("uni_txt_to_id.json", 'w') as f:
-        #     json.dump(self.uni_txt_to_id, f)
 
     def _extract_regex(self, tf: TokenizerFile) -> str:
         pt = tf.pre_tokenizer
@@ -76,21 +89,17 @@ class Tokenizer:
             "\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|\\s*[\\r\\n]+|" +\
             "\\s+(?!\\S)|\\s+"
 
-    def ids_starting_with_chars(self, chars: str) -> list[int]:
-        ids = []
-        for c in chars:
-            ids.extend(self.first_char_ids.get(c, []))
-        return ids
-
-    def pretokenize(self, text: str) -> list[str]:
+    def _pretokenize(self, text: str) -> list[str]:
+        """Splits text into chunks and maps character to unicode."""
         words: list[str] = self.regex.findall(text)
         words = [
             "".join(self.byte_to_unicode[ord(c)] for c in word)
             for word in words]
         return words
 
-    def tokenize_part(self, text: str) -> list[int]:
-        words = self.pretokenize(text)
+    def _tokenize_part(self, text: str) -> list[int]:
+        """Encodes given text without special tokens to tokens."""
+        words = self._pretokenize(text)
         tokens: list[int] = []
         for word in words:
             parts = list(word)
@@ -119,22 +128,45 @@ class Tokenizer:
         return tokens
 
     def decode(self, ids: list[int]) -> str:
+        """Decodes given ids to standard text.
+        Parameters
+        ----------
+        ids: list[int] - list of ids
+        Returns
+        ---------
+        str - decoded utf-8 text.
+        """
         uni_chars = "".join(self.id_to_uni_txt[i] for i in ids)
         raw_bytes = bytes(self.unicode_to_byte[ch] for ch in uni_chars)
         return raw_bytes.decode("utf-8")
 
     def encode(self, text: str) -> list[int]:
+        """"Main input to encode text including special tokens.
+        Parameters
+        ----------
+        text: str - text to encode
+        Returns
+        ---------
+        list[int] - list of token ids.
+        """
         tokens: list[int] = []
         specials = regex.findall(r"(?s)<\|.*?\|>", text)[::-1]
         rest = regex.split(r"(?s)<\|.*?\|>", text)[::-1]
         while specials or rest:
             if rest:
-                tokens += self.tokenize_part(rest.pop())
+                tokens += self._tokenize_part(rest.pop())
             if specials:
                 s = specials.pop()
                 tok_id = self.uni_txt_to_id.get(s)
                 if not tok_id:
-                    tokens += self.tokenize_part(s)
+                    tokens += self._tokenize_part(s)
                     continue
                 tokens.append(tok_id)
         return tokens
+
+    def ids_starting_with_chars(self, chars: str) -> list[int]:
+        """Returns all ids starting with any of the given chars."""
+        ids = []
+        for c in chars:
+            ids.extend(self.first_char_ids.get(c, []))
+        return ids
