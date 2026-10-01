@@ -114,7 +114,8 @@ def _make_handler(live_trace: VisQueue) -> type:
                             self.wfile.flush()
                             break
                         payload = json.dumps(dataclasses.asdict(step))
-                        self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+                        self.wfile.write(
+                            f"data: {payload}\n\n".encode("utf-8"))
                         self.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError):
                     pass

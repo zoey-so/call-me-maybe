@@ -1,8 +1,6 @@
 from llm_sdk import Small_LLM_Model
 from typing import Any
 import json
-import os
-import time
 import hashlib
 
 from .tokenizer import Tokenizer
@@ -10,13 +8,7 @@ from .parser import read_args
 from .models import Prompts, FuncDefs
 from .generate import generate_record
 
-from .generate import generate_from_closed_set, generate_boolean
 from .vis import VisQueue, start_trace_server
-import sys
-import socket
-import time
-import json
-import tempfile
 # import json
 # with open('data/input/functions_definition.json', 'r') as f:
 #     raw = json.load(f)
@@ -69,13 +61,11 @@ tokenizer = Tokenizer(model.get_path_to_tokenizer_file())
 str_defs = defs.model_dump_json()
 answers: list[dict[Any]] = []
 for task in prompts.all:
-    prompt_ids: list[int] = model.encode(system_prompt)[0].tolist()
     answer = generate_record(
         get_logits_fn=model.get_logits_from_input_ids,
         # encode_fn=lambda x: model.encode(x)[0].tolist(),
         encode_fn=tokenizer.encode,
         functions=defs.all,
-        base_ids=prompt_ids,
         tokenizer=tokenizer,
         prompt=system_prompt,
         task=task,
@@ -86,7 +76,8 @@ for task in prompts.all:
     answers.append(answer)
 with open(args.output, 'w') as f:
     json.dump(answers, f)
-live.finish()
+if live is not None:
+    live.finish()
 # model = Small_LLM_Model()
 # vocab = Tokenizer(model)
 # encoded = model.encode(text)[0].tolist()

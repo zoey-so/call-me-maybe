@@ -1,5 +1,6 @@
-from enum import Enum
+from __future__ import annotations
 
+from enum import Enum
 from pydantic import BaseModel, RootModel, field_validator, ConfigDict, Field
 from typing import Annotated, Literal, Any
 
@@ -95,10 +96,19 @@ class ParamType(Enum):
     NULL = "null"
 
 
+class ParamDef(BaseModel):
+    type: ParamType
+    properties: dict[str, ParamDef] | None = None
+    items: ParamDef | None = None
+
+
+ParamDef.model_rebuild()
+
+
 class FuncDef(BaseModel):
     name: str
     description: str
-    parameters: dict[str, dict[Literal["type"], ParamType]]
+    parameters: dict[str, ParamDef]
 
 
 class FuncDefs(RootModel[list[FuncDef]]):
@@ -113,3 +123,5 @@ class Prompts(RootModel[list[dict[Literal["prompt"], str]]]):
     def all(self) -> list[str]:
         """Return the list of input prompts."""
         return [x["prompt"] for x in self.root]
+
+
