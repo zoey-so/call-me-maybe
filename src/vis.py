@@ -4,6 +4,7 @@ import http.server
 import json
 import queue
 import threading
+from pathlib import Path
 
 
 @dataclasses.dataclass
@@ -67,7 +68,7 @@ class VisQueue:
             q.put(None)
 
 
-with open("src/frontend/viewer.html", 'r') as f:
+with open(Path(__file__).parent / "frontend" / "viewer.html", 'r') as f:
     _VIEWER_HTML = f.read()
 
 

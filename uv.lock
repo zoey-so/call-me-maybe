@@ -73,6 +73,7 @@ dependencies = [
     { name = "llm-sdk" },
     { name = "numpy" },
     { name = "pydantic" },
+    { name = "regex" },
     { name = "tokenizers" },
     { name = "transformers" },
 ]
@@ -90,8 +91,9 @@ requires-dist = [
     { name = "llm-sdk", editable = "llm_sdk" },
     { name = "numpy", specifier = "<2" },
     { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "regex", specifier = ">=2026.9.10" },
     { name = "tokenizers", specifier = ">=0.19.1" },
-    { name = "transformers", specifier = ">=4.51,<4.52" },
+    { name = "transformers", specifier = ">=4.51" },
 ]
 
 [package.metadata.requires-dev]

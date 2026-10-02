@@ -24,27 +24,41 @@ def do_bytes_to_unicode() -> dict[int, str]:
 class Tokenizer:
     """All logic for encoding and decoding with additional
     fast mapping dictionaries:
-    uni_txt_to_id - just model vocab dict
-    id_to_uni_txt - reversed vocab with ids as keys
-    byte_to_unicode - mapping of char conversion
-    unicode_to_byte - reversed conversion
-    id_to_byte_txt - mapping from id to standart text
-    first_char_ids - all normal chars have a list of all ids that
-                    start with them
-    merges - dict[tuple[str, str], int] merge pairs with ranking
-    regex - extracted regex for pretokanization split
-    Parameeters
-    ---------
+
+    - uni_txt_to_id - just model vocab dict
+    - id_to_uni_txt - reversed vocab with ids as keys
+    - byte_to_unicode - mapping of char conversion
+    - unicode_to_byte - reversed conversion
+    - id_to_byte_txt - mapping from id to standart text
+    - first_char_ids - all normal chars have a list of all ids that
+    start with them
+    - merges - dict[tuple[str, str], int] merge pairs with ranking
+    - regex - extracted regex for pretokanization split
+    Parameters
+    --------
     tf_path: str
         path to tokenizer.json file to be used.
+
+    Encoding and decoding::
+
+        >>> from src import Tokenizer
+        >>> tokenizer = Tokenizer("path_to_tokenizer.json")
+        >>> print(tokenizer.encode("<|im_start|>user Some text"))
+        [132223, 123, 423, 543]
+        >>> print(tokenizer.decode([132223, 123, 423, 543]))
+        "<im_start>user Some text"
     """
     def __init__(self, tf_path: str) -> None:
         with open(
                 tf_path,
                 'r', encoding="utf-8") as f:
             content = json.load(f)
-        tf = TokenizerFile.model_validate(content)
-        uni_txt_to_id: dict[str, int] = tf.model.vocab
+        try:
+            tf = TokenizerFile.model_validate(content)
+        except Exception:
+            raise ValueError(
+                "Not supported model or invalid tokenizer.json file.")
+        uni_txt_to_id: dict[str, int] = dict(tf.model.vocab)
         if tf.added_tokens:
             for at in tf.added_tokens:
                 uni_txt_to_id.setdefault(at.content, at.id)
@@ -73,8 +87,6 @@ class Tokenizer:
         self.byte_to_unicode: dict[int, str] = byte_to_unicode
         self.first_char_ids: dict[str, list[int]] = first_char_ids
         self.regex = regex.compile(self._extract_regex(tf))
-        with open("id_to_byte_txt.json", 'w') as f:
-            json.dump(self.id_to_byte_txt, f)
 
     def _extract_regex(self, tf: TokenizerFile) -> str:
         pt = tf.pre_tokenizer
@@ -158,7 +170,7 @@ class Tokenizer:
             if specials:
                 s = specials.pop()
                 tok_id = self.uni_txt_to_id.get(s)
-                if not tok_id:
+                if tok_id is None:
                     tokens += self._tokenize_part(s)
                     continue
                 tokens.append(tok_id)

@@ -44,5 +44,20 @@
   { "prompt": "Round 4.6 up to the nearest whole number" },
   { "prompt": "Round 4.2 down to the nearest whole number" },
 
-  { "prompt": "Tell me a joke" }
+  { "prompt": "Tell me a joke" },
+   {
+    "prompt": "Sum these numbers: 4, 8, 15, 16, 23, 42"
+  },
+  {
+    "prompt": "Sum an empty list of numbers"
+  },
+  {
+    "prompt": "Create a profile for Alice, age 30, who is currently active"
+  },
+  {
+    "prompt": "Add these number pairs together: (2, 3), (10, 20), and (7, 1)"
+  },
+  {
+    "prompt": "Add just one pair: (100, 250)"
+  }
 ]

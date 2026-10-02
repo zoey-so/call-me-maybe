@@ -67,12 +67,11 @@ def main() -> None:
                 steps=live,
                 _id=hashlib.md5(task.encode()).hexdigest()
             )
+            answers.append(answer)
+            total_time += pt
         except Exception as e:
             print(f"Problem occured with prompt: {task} - "
                   f"{e}\nSkipping this prompt...")
-
-        answers.append(answer)
-        total_time += pt
     try:
         with open(args.output, 'w') as f:
             json.dump(answers, f)

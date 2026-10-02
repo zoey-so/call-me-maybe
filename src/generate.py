@@ -234,8 +234,6 @@ def generate_number(
         current_ids = context_ids + generated_ids
         logits = get_logits_fn(current_ids)
         unconstrained_top = max(range(len(logits)), key=lambda i: logits[i])
-        print("top id: ",
-              tokenizer.id_to_byte_txt.get(unconstrained_top, "Not found"))
         txt = tokenizer.id_to_byte_txt.get(unconstrained_top, "")
         if "]" in txt and all(not c.isdigit() for c in txt):
             break
@@ -272,11 +270,10 @@ def generate_number(
 
 
 def _is_valid_string_content(text: str) -> bool:
-    disallowed_string_chars = {""}
     if not text:
         return False
     for ch in text:
-        if ch in disallowed_string_chars or ord(ch) < 0x20:
+        if ord(ch) < 0x20:
             return False
     return True
 
@@ -308,10 +305,7 @@ def generate_string(
             top_id = max(range(len(logits)), key=lambda i: logits[i])
             txt = tokenizer.id_to_byte_txt.get(top_id, "")
             is_valid = _is_valid_string_content(txt)
-            if top_id == 151645:
-                is_end = True
-                break
-            elif '"' in txt:
+            if '"' in txt:
                 if generated_ids or txt.count('"') > 1:
                     is_end = True
                     break
@@ -406,7 +400,7 @@ def generate_parameter_value(
             answer += json.dumps(value)
             context_ids = base_ids + tokenizer.encode(answer)
             next_ids = get_logits_fn(context_ids)
-            best = max(range(len(ids)), key=lambda i: next_ids[i])
+            best = max(range(len(next_ids)), key=lambda i: next_ids[i])
             if ']' in tokenizer.id_to_byte_txt.get(best, ']'):
                 break
         return res_arr, ids, step_index
@@ -430,7 +424,6 @@ def select_function(
     with function names to get function name.
     """
     names = [f.name for f in functions]
-    # print("names: ", names)
     matched_name, ids, step_index = generate_from_closed_set(
         get_logits_fn, context_ids, tokenizer,
         names, steps, "select_function", prompt, _id, answer, step_index)

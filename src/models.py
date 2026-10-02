@@ -5,17 +5,6 @@ from pydantic import BaseModel, RootModel, \
 from typing import Annotated, Literal, Any
 
 
-class VocabFile(RootModel[dict[str, int]]):
-    @field_validator("root")
-    @classmethod
-    def _check_ids(cls, v: dict[str, int]) -> dict[str, int]:
-        if not v:
-            raise ValueError("vocab file is empty")
-        if any(i < 0 for i in v.values()):
-            raise ValueError("vocab file contains negative token ids")
-        return v
-
-
 class _ExtraIgnore(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -102,11 +91,9 @@ class ArrParamDef(BaseModel):
     items: ParamDef
 
 
-ParamDef = FlatParamDef | ObjParamDef | ArrParamDef
-
-
-class RootParamDef(BaseModel):
-    root: ParamDef = Field(..., discriminator="type")
+ParamDef = Annotated[
+    FlatParamDef | ObjParamDef | ArrParamDef,
+    Field(discriminator="type")]
 
 
 ObjParamDef.model_rebuild()
@@ -117,6 +104,7 @@ class FuncDef(BaseModel):
     name: str
     description: str
     parameters: dict[str, ParamDef]
+    returns: ParamDef
 
 
 class FuncDefs(RootModel[list[FuncDef]]):
