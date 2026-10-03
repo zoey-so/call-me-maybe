@@ -265,7 +265,7 @@ def generate_number(
             raise RuntimeError(
                 f"number generation produced no usable digits (text={text!r})")
         return None, generated_ids, step_index
-    res = float(text) if "." in text else int(text)
+    res = float(text)
     return res, generated_ids, step_index
 
 
@@ -350,11 +350,14 @@ def generate_parameter_value(
     answer: str,
     step_index: int = 0
 ) -> tuple[Any, list[int], int]:
-    if param_def.type == "number":
+    if param_def.type == "number" or param_def.type == "integer":
         context_ids = base_ids + tokenizer.encode(answer)
-        return generate_number(
+        a, b, c = generate_number(
             get_logits_fn, context_ids, tokenizer,
             steps, _id, answer, step_index)
+        if param_def.type == "integer":
+            a = int(a)
+        return a, b, c
     if param_def.type == "string":
         context_ids = base_ids + tokenizer.encode(answer)
         return generate_string(
@@ -478,7 +481,9 @@ def generate_record(
             get_logits_fn, base_ids,
             tokenizer, param_def, steps,
             _id, answer, step_index)
-        answer += ' ' + json.dumps(value)
+        if param_def.type == "string":
+            value = value.replace("\\\\", "\\")
+        answer += ' ' + json.dumps(value).replace("\\\\", "\\")
         parameters[param_name] = value
 
     tet = time.time()

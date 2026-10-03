@@ -78,7 +78,7 @@ class TokenizerFile(_ExtraIgnore):
 # ===== Function Definitions
 
 class FlatParamDef(BaseModel):
-    type: Literal["boolean", "string", "number", "null"]
+    type: Literal["boolean", "string", "number", "null", "integer"]
 
 
 class ObjParamDef(BaseModel):
@@ -91,10 +91,11 @@ class ArrParamDef(BaseModel):
     items: ParamDef
 
 
-ParamDef = Annotated[
-    FlatParamDef | ObjParamDef | ArrParamDef,
-    Field(discriminator="type")]
+ParamDef = FlatParamDef | ObjParamDef | ArrParamDef
 
+
+class RootParamDef(BaseModel):
+    root: ParamDef = Field(..., discriminator="type")
 
 ObjParamDef.model_rebuild()
 ArrParamDef.model_rebuild()
@@ -104,7 +105,7 @@ class FuncDef(BaseModel):
     name: str
     description: str
     parameters: dict[str, ParamDef]
-    returns: ParamDef
+
 
 
 class FuncDefs(RootModel[list[FuncDef]]):
