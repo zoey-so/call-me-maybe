@@ -2,6 +2,7 @@
 # ABOUTME: Provides Small_LLM_Model class for loading and running causal language models.
 
 import time
+from typing import Tuple
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedTokenizer, PreTrainedModel, logging

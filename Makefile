@@ -4,13 +4,13 @@ install:
 	uv sync
 
 run:
-	uv run -m src
+	uv run -m src -v -p 42424
 
 run-smolLM2-1-7B:
-	uv run python -m src --model HuggingFaceTB/SmolLM2-1.7B-Instruct
+	uv run python -m src --model HuggingFaceTB/SmolLM2-1.7B-Instruct -v -p 42424
 
 run-smolLM2-360M:
-	uv run python -m src --model HuggingFaceTB/SmolLM2-360M-Instruct
+	uv run python -m src --model HuggingFaceTB/SmolLM2-360M-Instruct -v -p 42424
 
 debug:
 	uv run -m pdb -m src
