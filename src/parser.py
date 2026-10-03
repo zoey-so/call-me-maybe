@@ -82,9 +82,9 @@ def read_args() -> argparse.Namespace:
     parser.add_argument(
         "-o", "--output",
         type=check_output_path,
-        default="data/output/function_calls.json",
+        default="data/output/function_calling_results.json",
         help="Path to output JSON file with results"
-                "(default: data/output/function_calls.json)"
+                "(default: data/output/function_calling_results.json)"
     )
     parser.add_argument(
         "-m", "--model",
